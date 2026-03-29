@@ -32,28 +32,55 @@ void write_png(const char* filename, const unsigned char* image, unsigned width,
   free(png);
 }
 
+// создадим рамки - рабочую область, чтобы не мучиться с сущей и надписями
+typedef struct WorkArea{
+    int x, y;      // лев_верх
+    int w;      // ширина области
+    int h;      // высота области
+} WorkArea;
 
-// вариант огрубления серого цвета в ЧБ 
-void contrast(unsigned char *col, int bw_size)
-{ 
-    int i; 
-    for(i=0; i < bw_size; i++)
-    {
-        if(col[i] < 55)
-        col[i] = 0; 
-        if(col[i] > 195)
-        col[i] = 255;
-    } 
-    return; 
+// подсчет танкеров - белых пикселей
+int count_pixels(unsigned char *pic, int img_width, WorkArea area) {
+    int count = 0;
+    for (int i = area.y; i < area.y + area.h; i++) {
+        for (int j = area.x; j < area.x + area.w; j++) {
+            if (pic[i * img_width + j] == 255) {
+                count++;
+            }
+        }
+    }
+    return count;
+}
+
+
+void process_area(WorkArea area, unsigned char *bw_pic, unsigned char *blr_pic, int img_width) {
+    printf("x=%d, y=%d... ", area.x, area.y);
+
+    Gauss_blur_area(bw_pic, blr_pic, img_width, area);
+    contrast_area(blr_pic, img_width, area);
+    int tankers = count_pixels(blr_pic, img_width, area);
+    printf("%d\n", tankers);
+}
+
+
+// вариант огрубления серого цвета в ЧБ в нутри области
+void contrast_area(unsigned char *col, int img_width, WorkArea area) { 
+    for(int i = area.y; i < area.y + area.h; i++) {
+        for(int j = area.x; j < area.x + area.w; j++) {
+            int idx = i * img_width + j;
+            if(col[idx] < 120){
+                col[idx] = 0;}   // все что темнее 120 - в ноль
+            else 
+                col[idx] = 255;              //яркое - в белый
+        }
+    }
 } 
 
-// Гауссово размыттие
-void Gauss_blur(unsigned char *col, unsigned char *blr_pic, int width, int height)
-{ 
-    int i, j; 
-    for(i=1; i < height-1; i++) 
-        for(j=1; j < width-1; j++)
-        { 
+// Гауссово размыттие только внутри области
+void Gauss_blur_area(unsigned char *col, unsigned char *blr_pic, int width, WorkArea area) { 
+    for(int i = area.y + 1; i < area.y + area.h - 1; i++) {
+        for(int j = area.x + 1; j < area.x + area.w - 1; j++) {
+            int idx = width * i + j; //центральный пиксель
             blr_pic[width*i+j] = 0.084*col[width*i+j] + 0.084*col[width*(i+1)+j] + 0.084*col[width*(i-1)+j]; 
             blr_pic[width*i+j] = blr_pic[width*i+j] + 0.084*col[width*i+(j+1)] + 0.084*col[width*i+(j-1)]; 
             blr_pic[width*i+j] = blr_pic[width*i+j] + 0.063*col[width*(i+1)+(j+1)] + 0.063*col[width*(i+1)+(j-1)]; 
