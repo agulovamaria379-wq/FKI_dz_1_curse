@@ -4,6 +4,13 @@
 #include <math.h> 
 #include "lodepng.h" 
 
+
+//                             --- Функции загрузки и записи ---
+//так как снимок в ч/б
+void rgba_to_gray(unsigned char* rgba, unsigned char* gray, int w, int h) {
+    for (int i = 0; i < w * h; i++) {
+        gray[i] = rgba[i * 4]; //Берем красный канал как интенсивность
+    }
 // принимаем на вход: имя файла, указатели на int для хранения прочитанной ширины и высоты картинки
 // возвращаем указатель на выделенную память для хранения картинки
 // Если память выделить не смогли, отдаем нулевой указатель и пишем сообщение об ошибке
@@ -32,12 +39,15 @@ void write_png(const char* filename, const unsigned char* image, unsigned width,
   free(png);
 }
 
+
+//                                  --- Обработка изображения ---
 // создадим рамки - рабочую область, чтобы не мучиться с сущей и надписями
 typedef struct WorkArea{
     int x, y;      // лев_верх
     int w;      // ширина области
     int h;      // высота области
 } WorkArea;
+
 
 // подсчет танкеров - белых пикселей
 int count_pixels(unsigned char *pic, int img_width, WorkArea area) {
@@ -118,21 +128,60 @@ int main()
         return -1; 
     } 
 
+    int total_ships = 0;
+
     size = width * height * 4;
     bw_size = width * height;
     
     
     unsigned char* bw_pic = (unsigned char*)malloc(bw_size*sizeof(unsigned char)); 
     unsigned char* blr_pic = (unsigned char*)malloc(bw_size*sizeof(unsigned char)); 
-    unsigned char* finish = (unsigned char*)malloc(size*sizeof(unsigned char)); 
- 
-    // Например, поиграли с  контрастом
-    contrast(bw_pic, bw_size); 
+    unsigned char* finish = (unsigned char*)malloc(size*sizeof(unsigned char));
+    
+    // Перевод в Gray (берем канал R)
+    for(int i=0; i<bw_size; i++){
+        bw_pic[i] = picture[i*4];
+    }
+
+    //
+    WorkArea zones[] = {
+        {632, 34, 91, 210}, {524, 160, 82, 119}, {637, 272, 61, 38},
+        {550, 320, 63, 22}, {500, 326, 50, 13},  {514, 337, 276, 78},
+        {524, 444, 52, 89}, {533, 533, 41, 25},  {1071, 403, 26, 32},
+        {990, 586, 104, 50}, {886, 620, 45, 27}, {498, 299, 70, 17},
+        {573, 420, 375, 180}
+    };
+    int num_zones = 13;
+
+
+    for (int i = 0; i < 12; i++) {
+        // Первое, приводим к общему значению(блюром)
+        Gauss_blur(bw_pic, blr_pic, width, zones[i]);
+        //превращаем сереое в белое 
+        contrast(bw_pic, bw_size);
+        //считаем кораблем >= 4 пикселя
+        int ships_in_zone = 0;
+        for (int y = zones[i].y; y < zones[i].y + zones[i].h; y++) {
+            for (int x = zones[i].x; x < zones[i].x + zones[i].w; x++) {
+                if (blr_pic[y * width + x] == 255) {
+                    int size = get_object_size(blr_pic, x, y, width, zones[i]);
+                    if (size >= 4) {
+                        ships_in_zone++;
+                }
+            }
+        }
+    }
+    printf("Зона %d: Найдено %d \n", i + 1, ships_in_zone);
+    total_ships += ships_in_zone;
+}
+printf("Итоговое количество танкеров: %d\n", total_ships);
+
+
         // посмотрим на промежуточные картинки
     write_png("contrast.png", finish, width, height);
     
     // поиграли с Гауссом
-    Gauss_blur(bw_pic, blr_pic, width, height); 
+    
     // посмотрим на промежуточные картинки
     write_png("gauss.png", finish, width, height);
     
