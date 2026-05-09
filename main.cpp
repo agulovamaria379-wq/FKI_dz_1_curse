@@ -185,8 +185,11 @@ int main() {
     };
 
     int num_zones = 13;
-    int threshold = 180;
+    int threshold = 80;  //снизим порог вместо 180
     int total_ships = 0;
+
+    //чистим чтобы вокгуг зон все оставалось черным
+    memset(blr_pic, 0, width * height); 
 
     for (int i = 0; i < num_zones; i++) {
 
@@ -196,11 +199,11 @@ int main() {
         }
         // Первое, приводим к общему значению(блюром)
         Gauss_blur_area(bw_pic, blr_pic, width, zones[i]);
-        write_png_gray("after_blur.png", blr_pic, width, height); // Сохраняем результат блюра
+        
         
         //превращаем сереое в белое 
         contrast_area(blr_pic, width, zones[i], threshold);
-        write_png("after_contrast.png", blr_pic, width, height); // Видим только белые пятна
+        
         
         //считаем кораблем >= 4 пикселя
         int ships_in_zone = 0;
@@ -215,9 +218,12 @@ int main() {
             }
         }
         
-        printf("Зона %d: Найдено %d \n", i + 1, ships_in_zone);
+        printf("Зона %d: Найдено: %d \n", i + 1, ships_in_zone);
         total_ships += ships_in_zone;
     }
+
+    write_png_gray("after_blur.png", blr_pic, width, height); // Сохраняем результат блюра
+    write_png_gray("after_contrast.png", blr_pic, width, height); // Видим только белые пятна
 
     // Сохраняем финальную маску (теперь тут только крупные объекты)
     write_png_gray("final_clusters.png", blr_pic, width, height); 
