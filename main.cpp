@@ -79,15 +79,17 @@ int get_object_size(unsigned char *pic, int x, int y, int img_width, WorkArea ar
 
 
 // 2. Гауссово размыттие только внутри области
+// попробуем изменить гаусово размытие, так как множество кораблей особенно в первой области смазываются
+// увеличим вес центрального пикселя и сделаем чтобы сумма была 1ю0
 void Gauss_blur_area(unsigned char *col, unsigned char *blr_pic, int width, WorkArea area){ 
     for(int i = area.y + 1; i < area.y + area.h - 1; i++) {
         for(int j = area.x + 1; j < area.x + area.w - 1; j++) {
             int idx = width * i + j; //центральный пиксель
-            float sum = 0.084 * col[idx] + 
-                        0.084 * col[width * (i + 1) + j] + 0.084 * col[width * (i - 1) + j] +
-                        0.084 * col[width * i + (j + 1)] + 0.084 * col[width * i + (j - 1)] +
-                        0.063 * col[width * (i + 1) + (j + 1)] + 0.063 * col[width * (i + 1) + (j - 1)] +
-                        0.063 * col[width * (i - 1) + (j + 1)] + 0.063 * col[width * (i - 1) + (j - 1)];
+            float sum = 0.70 * col[idx] + 
+                        0.05 * (col[width * (i + 1) + j] + col[width * (i - 1) + j] + 
+                                col[width * i + (j + 1)] + col[width * i + (j - 1)]) + // Крест
+                        0.025 * (col[width * (i + 1) + (j + 1)] + col[width * (i + 1) + (j - 1)] + 
+                                col[width * (i - 1) + (j + 1)] + col[width * (i - 1) + (j - 1)]); // Углы
             blr_pic[idx] = (unsigned char)sum;
         }
     } 
@@ -147,7 +149,8 @@ void process_area(WorkArea area, unsigned char *bw_pic, unsigned char *blr_pic, 
 // Перевод RGBA в Gray
 void rgba_to_gray(unsigned char* rgba, unsigned char* gray, int w, int h) {
     for (int i = 0; i < w * h; i++) {
-        gray[i] = rgba[i * 4];
+        // Индекс 1 — это зеленый канал (G)
+        gray[i] = rgba[i * 4+1]; //так как рамки красные - изменила
     }
 }
 
@@ -165,7 +168,7 @@ int main() {
         return -1; 
     } 
 
-    printf("Image loaded: %ux%u\n", width, height);
+    printf("Картинка загружена: %ux%u\n", width, height);
 
     int bw_size = width * height;
     unsigned char* bw_pic = (unsigned char*)malloc(bw_size); 
@@ -185,7 +188,7 @@ int main() {
     };
 
     int num_zones = 13;
-    int threshold = 80;  //снизим порог вместо 180
+    int threshold = 70;  //снизим порог вместо 180
     int total_ships = 0;
 
     //чистим чтобы вокгуг зон все оставалось черным
@@ -197,21 +200,28 @@ int main() {
         for (int y = zones[i].y; y < zones[i].y + zones[i].h; y++) {
             memcpy(blr_pic + y * width + zones[i].x, bw_pic + y * width + zones[i].x, zones[i].w);
         }
+        for (int k = 0; k < 10; k++) {
         // Первое, приводим к общему значению(блюром)
-        Gauss_blur_area(bw_pic, blr_pic, width, zones[i]);
-        
+            Gauss_blur_area(bw_pic, blr_pic, width, zones[i]);
+        }
+    }
+    //  сохраняем блюр
+write_png_gray("after_blur.png", blr_pic, width, height);
+
+
+    for (int i = 0; i < num_zones; i++) {
         
         //превращаем сереое в белое 
         contrast_area(blr_pic, width, zones[i], threshold);
         
         
-        //считаем кораблем >= 4 пикселя
+        //считаем кораблем >= 1 пикселя, в чб
         int ships_in_zone = 0;
         for (int y = zones[i].y; y < zones[i].y + zones[i].h; y++) {
             for (int x = zones[i].x; x < zones[i].x + zones[i].w; x++) {
                 if (blr_pic[y * width + x] == 255) {
                     int obj_size = get_object_size(blr_pic, x, y, width, zones[i]);
-                    if (obj_size >= 4) {
+                    if (obj_size >= 1 && obj_size <= 30) {
                         ships_in_zone++;
                     }
                 }
@@ -222,7 +232,6 @@ int main() {
         total_ships += ships_in_zone;
     }
 
-    write_png_gray("after_blur.png", blr_pic, width, height); // Сохраняем результат блюра
     write_png_gray("after_contrast.png", blr_pic, width, height); // Видим только белые пятна
 
     // Сохраняем финальную маску (теперь тут только крупные объекты)
